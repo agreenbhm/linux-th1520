@@ -45,6 +45,9 @@ config ARCH_THEAD
 	bool "T-HEAD RISC-V SoCs"
 	depends on MMU && !XIP_KERNEL
 	select ERRATA_THEAD
+	select GENERIC_PINCTRL_GROUPS
+	select PINCTRL
+	select PINCTRL_LIGHT
 	help
 	  This enables support for the RISC-V based T-HEAD SoCs.
 

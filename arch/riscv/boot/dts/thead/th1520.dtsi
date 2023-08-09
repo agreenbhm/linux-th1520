@@ -5,11 +5,49 @@
  */
 
 #include <dt-bindings/interrupt-controller/irq.h>
+#include <dt-bindings/clock/light-fm-ap-clock.h>
+#include <dt-bindings/thermal/thermal.h>
+#include <dt-bindings/pinctrl/light-fm-left-pinctrl.h>
+#include <dt-bindings/pinctrl/light-fm-right-pinctrl.h>
+#include <dt-bindings/pinctrl/light-fm-aon-pinctrl.h>
+#include <dt-bindings/pinctrl/light-fm-audio-pinctrl.h>
 
 / {
 	compatible = "thead,th1520";
 	#address-cells = <2>;
 	#size-cells = <2>;
+
+	thermal-zones {
+		cpu-thermal-zone {
+			polling-delay-passive = <250>;
+			polling-delay = <2000>;
+			thermal-sensors = <&pvt 0>;
+			trips {
+				cpu_config0: trip0 {
+					temperature = <85000>;
+					hysteresis = <2000>;
+					type = "passive";
+				};
+
+				cpu_config1: trip1 {
+					temperature = <110000>;
+					hysteresis = <2000>;
+					type = "critical";
+				};
+			};
+
+			cooling-maps {
+				cpu_cdev {
+					trip = <&cpu_config0>;
+					cooling-device =
+						<&c910_0 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>,
+						<&c910_1 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>,
+						<&c910_2 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>,
+						<&c910_3 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>;
+				};
+			};
+		};
+	};
 	
 	cpus: cpus {
 		#address-cells = <1>;
@@ -29,7 +67,8 @@
 			d-cache-sets = <512>;
 			next-level-cache = <&l2_cache>;
 			mmu-type = "riscv,sv39";
-
+			#cooling-cells = <0x02>;
+			
 			cpu0_intc: interrupt-controller {
 				compatible = "riscv,cpu-intc";
 				interrupt-controller;
@@ -49,7 +88,8 @@
 			d-cache-size = <65536>;
 			d-cache-sets = <512>;
 			next-level-cache = <&l2_cache>;
-			mmu-type = "riscv,sv39";
+			mmu-type = "riscv,sv39";			
+			#cooling-cells = <0x02>;
 
 			cpu1_intc: interrupt-controller {
 				compatible = "riscv,cpu-intc";
@@ -71,6 +111,7 @@
 			d-cache-sets = <512>;
 			next-level-cache = <&l2_cache>;
 			mmu-type = "riscv,sv39";
+			#cooling-cells = <0x02>;
 
 			cpu2_intc: interrupt-controller {
 				compatible = "riscv,cpu-intc";
@@ -92,6 +133,7 @@
 			d-cache-sets = <512>;
 			next-level-cache = <&l2_cache>;
 			mmu-type = "riscv,sv39";
+			#cooling-cells = <0x02>;
 
 			cpu3_intc: interrupt-controller {
 				compatible = "riscv,cpu-intc";
@@ -110,6 +152,18 @@
 		};
 	};
 
+	pvt: pvt@fffff4e000 {
+	    compatible = "moortec,mr75203";
+	    reg = <0xff 0xfff4e000 0x0 0x80>,
+		  <0xff 0xfff4e080 0x0 0x100>,
+		  <0xff 0xfff4e180 0x0 0x680>,
+		  <0xff 0xfff4e800 0x0 0x600>;
+	    reg-names = "common", "ts", "pd", "vm";
+	    clocks = <&dummy_clock_aonsys_clk>;
+	    #thermal-sensor-cells = <1>;
+	    status = "okay";
+	};
+
 	osc: oscillator {
 		compatible = "fixed-clock";
 		clock-output-names = "osc_24m";
@@ -120,6 +174,14 @@
 		compatible = "fixed-clock";
 		clock-output-names = "osc_32k";
 		#clock-cells = <0>;
+	};
+
+	rc_24m: clock-rc-24m@13 {
+		compatible = "fixed-clock";
+		/*reg = <13>;*/
+		#clock-cells = <0>;
+		clock-frequency = <24000000>;
+		clock-output-names = "rc_24m";
 	};
 
 	apb_clk: apb-clk-clock {
@@ -138,6 +200,14 @@
 		compatible = "fixed-clock";
 		clock-frequency = <198000000>;
 		clock-output-names = "sdhci_clk", "dummy_clock_sdhci";
+		#clock-cells = <0>;
+	};
+
+	dummy_clock_aonsys_clk: aonsys-clk-clock@19 {
+		compatible = "fixed-clock";
+		/*reg = <19>;*/
+		clock-frequency = <73728000>;
+		clock-output-names = "dummy_clock_aonsys_clk";
 		#clock-cells = <0>;
 	};
 
@@ -470,5 +540,65 @@
 				interrupts = <55 IRQ_TYPE_LEVEL_HIGH>;
 			};
 		};
+	};
+
+	clk: clock-controller@ffef010000 {
+		compatible = "thead,light-fm-ree-clk";
+		reg = <0xff 0xef010000 0x0 0x1000>;
+		#clock-cells = <1>;
+		clocks = <&osc_32k>, <&osc>, <&rc_24m>;
+		clock-names = "osc_32k", "osc", "rc_24m";
+	
+		/*clocks = <&osc_32k>, <&osc>, <&rc_24m>;
+		clock-names = "osc_32k", "osc_24m", "rc_24m";*/
+	
+		status = "okay";
+	};
+
+	padctrl0-apsys@ffec007000 {
+		compatible = "thead,light-fm-right-pinctrl";
+		reg = <0xff 0xec007000 0x00 0x1000>;
+		status = "okay";
+
+		light-evb-padctrl0 {
+
+			uart0grp {
+				thead,pins = <0x00 0x00 0x72 0x01 0x00 0x72>;
+			};
+
+			spi0grp {
+				thead,pins = <0x0f 0x03 0x20a 0x0e 0x00 0x20a 0x11 0x00 0x23a 0x10 0x00 0x23a>;
+			};
+
+			qspi0grp {
+				thead,pins = <0x02 0x00 0x20f 0x03 0x03 0x20f 0x04 0x00 0x20f 0x05 0x00 0x23f 0x06 0x00 0x23f 0x07 0x00 0x23f 0x08 0x00 0x23f>;
+			};
+
+			i2s0grp {
+				thead,pins = <0x02 0x02 0x208 0x03 0x02 0x238 0x04 0x02 0x208 0x05 0x02 0x238 0x06 0x02 0x238 0x07 0x02 0x238 0x08 0x02 0x238>;
+			};
+
+			pinctrl_pwm: pwmgrp {
+				thead,pins = <0x22 0x01 0x208>;
+			};
+		};
+	};
+
+	pwm: pwm@ffec01c000 {
+		compatible = "thead,pwm-light";
+		reg = <0xff 0xec01c000 0x0 0x4000>;
+		#pwm-cells = <2>;
+		clocks = <&clk CLKGEN_PWM_PCLK>,
+		         <&clk CLKGEN_PWM_CCLK>;
+		clock-names = "pclk", "cclk";
+		pinctrl-names = "default";
+		pinctrl-0 = <&pinctrl_pwm>;
+	};
+
+	fan: pwm-fan {
+		compatible = "pwm-fan";
+		#cooling-cells = <0x02>;
+		pwms = <&pwm 0x01 0x989680 0x00>;
+		cooling-levels = <0x00 0x40 0xc0 0xff>;
 	};
 };
