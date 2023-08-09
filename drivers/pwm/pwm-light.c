@@ -196,14 +196,13 @@ static int pwm_light_set_polarity(struct pwm_chip *chip, struct pwm_device *pwm,
 	return 0;
 }
 
-/*static const struct pwm_ops pwm_light_ops = {
+static const struct pwm_ops pwm_light_ops = {
 	.enable = pwm_light_enable,
 	.disable = pwm_light_disable,
 	.config = pwm_light_config,
 	.set_polarity = pwm_light_set_polarity,
 	.owner = THIS_MODULE,
 };
-*/
 
 static int __maybe_unused light_pwm_runtime_suspend(struct device *dev)
 {
@@ -268,7 +267,7 @@ static int pwm_light_probe(struct platform_device *pdev)
 	if (IS_ERR(plc->mmio_base))
 		return PTR_ERR(plc->mmio_base);
 
-	//plc->chip.ops = &pwm_light_ops;
+	plc->chip.ops = &pwm_light_ops;
 	plc->chip.dev = &pdev->dev;
 	plc->chip.npwm = MAX_PWM_NUM;
 
@@ -291,6 +290,7 @@ static int pwm_light_remove(struct platform_device *pdev)
 
 	pm_runtime_disable(&pdev->dev);
 
+	//return pwmchip_remove(&plc->chip);
 	pwmchip_remove(&plc->chip);
 	return 0;
 }

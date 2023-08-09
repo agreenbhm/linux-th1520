@@ -18,17 +18,8 @@
 #include <dt-bindings/pinctrl/light-fm-right-pinctrl.h>
 #include <dt-bindings/pinctrl/light-fm-left-pinctrl.h>
 #include <dt-bindings/pinctrl/light-fm-aon-pinctrl.h>
-#include <dt-bindings/pinctrl/light-fm-audio-pinctrl.h>
-
+#include <linux/seq_file.h>
 #include "../core.h"
-
-enum light_pinctrl_type {
-	 LIGHT_MPW,
-	 LIGHT_FM_RIGHT,
-	 LIGHT_FM_LEFT,
-	 LIGHT_FM_AON,
-	 LIGHT_FM_AUDIO,
-};
 
 struct light_pin {
 	unsigned int pin_id;
@@ -59,8 +50,6 @@ struct light_pinctrl_soc_info {
 	unsigned int grp_index;
 	struct light_pmx_func *functions;
 	unsigned int nfunctions;
-	char         *label;
-	enum light_pinctrl_type type;
 
 	unsigned int cfg_off;
 	unsigned int mux_off;
@@ -77,7 +66,6 @@ struct light_pinctrl {
 #define LIGHT_PINCTRL_PIN(pin)	PINCTRL_PIN(pin, #pin)
 #define LIGHT_PAD_CONFIG(idx)	(priv->info->cfg_off + (idx >> 1) * 4)
 #define LIGHT_PAD_MUX(idx)	(priv->info->mux_off + ((idx >> 3) * 4))
-#define LIGHT_AUDIO_PAD_MUX(idx)	(priv->info->mux_off + ((idx >> 4) * 4))
 
 static const char *pin_get_name_from_info(struct light_pinctrl_soc_info *info,
 					  const unsigned int pin_id)
@@ -259,31 +247,13 @@ static int light_pmx_set(struct pinctrl_dev *pctldev, unsigned int selector,
 				continue;
 		}
 
-		if (info->type == LIGHT_FM_AUDIO) {
-			if (pin->mux_mode == AUDIO_IO_GPIO) {
-				mux = ~(1 << pin_id) & readl(priv->base);
-				writel(mux, priv->base); /* Controlled by GPIO under AUDIO_SUBSYS */
-				continue;
-			}
-			mux = (1 << pin_id) | readl(priv->base);
-			writel(mux, priv->base);
-
-			mux = readl(priv->base + LIGHT_AUDIO_PAD_MUX(pin_id));
-			shift = ((pin_id % 16) << 1);
-			mux &= ~(0x3 << shift);	/* 2 mux bits for one pad */
-			mux |= (pin->mux_mode << shift);
-			writel(mux, priv->base + LIGHT_AUDIO_PAD_MUX(pin_id));
-			dev_dbg(priv->dev, "write: offset 0x%x val 0x%x\n",
-				LIGHT_AUDIO_PAD_MUX(pin_id), mux);
-		} else {
-			mux = readl(priv->base + LIGHT_PAD_MUX(pin_id));
-			shift = ((pin_id % 8) << 2);
-			mux &= ~(0xF << shift);	/* 4 mux bits for one pad */
-			mux |= (pin->mux_mode << shift);
-			writel(mux, priv->base + LIGHT_PAD_MUX(pin_id));
-			dev_dbg(priv->dev, "write: offset 0x%x val 0x%x\n",
-				LIGHT_PAD_MUX(pin_id), mux);
-		}
+		mux = readl(priv->base + LIGHT_PAD_MUX(pin_id));
+		shift = ((pin_id % 8) << 2);
+		mux &= ~(0xF << shift);	/* 4 mux bits for one pad */
+		mux |= (pin->mux_mode << shift);
+		writel(mux, priv->base + LIGHT_PAD_MUX(pin_id));
+		dev_dbg(priv->dev, "write: offset 0x%x val 0x%x\n",
+			LIGHT_PAD_MUX(pin_id), mux);
 	}
 
 	return 0;
@@ -460,15 +430,7 @@ static int light_pinctrl_parse_groups(struct device_node *np,
 		struct light_pin *pin = &grp->pins[i];
 
 		pin->pin_id = be32_to_cpu(*list++);
-		if (info->type == LIGHT_FM_AUDIO) {
-			pin->mux_mode = be32_to_cpu(*list++);
-			if (pin->mux_mode != AUDIO_IO_GPIO){
-				pin->mux_mode &= 0x3;
-			}
-		} else {
-			pin->mux_mode = be32_to_cpu(*list++) & 0xF;
-
-		}
+		pin->mux_mode = be32_to_cpu(*list++) & 0xF;
 		pin->config = be32_to_cpu(*list++) & 0xFFFF;
 		grp->pin_ids[i] = grp->pins[i].pin_id;
 
@@ -879,40 +841,6 @@ static const struct pinctrl_pin_desc light_fm_aon_pinctrl_pads[] = {
 	LIGHT_PINCTRL_PIN(FM_AUDIO_PA30),
 };
 
-static const struct pinctrl_pin_desc light_fm_audio_pinctrl_pads[] = {
-	LIGHT_PINCTRL_PIN(FM_AUDIO_IO_PA0),
-	LIGHT_PINCTRL_PIN(FM_AUDIO_IO_PA1),
-	LIGHT_PINCTRL_PIN(FM_AUDIO_IO_PA2),
-	LIGHT_PINCTRL_PIN(FM_AUDIO_IO_PA3),
-	LIGHT_PINCTRL_PIN(FM_AUDIO_IO_PA4),
-	LIGHT_PINCTRL_PIN(FM_AUDIO_IO_PA5),
-	LIGHT_PINCTRL_PIN(FM_AUDIO_IO_PA6),
-	LIGHT_PINCTRL_PIN(FM_AUDIO_IO_PA7),
-	LIGHT_PINCTRL_PIN(FM_AUDIO_IO_PA8),
-	LIGHT_PINCTRL_PIN(FM_AUDIO_IO_PA9),
-	LIGHT_PINCTRL_PIN(FM_AUDIO_IO_PA10),
-	LIGHT_PINCTRL_PIN(FM_AUDIO_IO_PA11),
-	LIGHT_PINCTRL_PIN(FM_AUDIO_IO_PA12),
-	LIGHT_PINCTRL_PIN(FM_AUDIO_IO_PA13),
-	LIGHT_PINCTRL_PIN(FM_AUDIO_IO_PA14),
-	LIGHT_PINCTRL_PIN(FM_AUDIO_IO_PA15),
-	LIGHT_PINCTRL_PIN(FM_AUDIO_IO_PA16),
-	LIGHT_PINCTRL_PIN(FM_AUDIO_IO_PA17),
-	LIGHT_PINCTRL_PIN(FM_AUDIO_IO_PA18),
-	LIGHT_PINCTRL_PIN(FM_AUDIO_IO_PA19),
-	LIGHT_PINCTRL_PIN(FM_AUDIO_IO_PA20),
-	LIGHT_PINCTRL_PIN(FM_AUDIO_IO_PA21),
-	LIGHT_PINCTRL_PIN(FM_AUDIO_IO_PA22),
-	LIGHT_PINCTRL_PIN(FM_AUDIO_IO_PA23),
-	LIGHT_PINCTRL_PIN(FM_AUDIO_IO_PA24),
-	LIGHT_PINCTRL_PIN(FM_AUDIO_IO_PA25),
-	LIGHT_PINCTRL_PIN(FM_AUDIO_IO_PA26),
-	LIGHT_PINCTRL_PIN(FM_AUDIO_IO_PA27),
-	LIGHT_PINCTRL_PIN(FM_AUDIO_IO_PA28),
-	LIGHT_PINCTRL_PIN(FM_AUDIO_IO_PA29),
-	LIGHT_PINCTRL_PIN(FM_AUDIO_IO_PA30),
-};
-
 static int light_pinctrl_mpw_convert_pin_off(const unsigned int pin_id)
 {
 	unsigned int cov_pin_id = pin_id;
@@ -937,7 +865,6 @@ static int light_pinctrl_fm_aon_covert_pin_off(const unsigned int pin_id)
 static struct light_pinctrl_soc_info light_mpw_pinctrl_info = {
 	.pins = light_mpw_pinctrl_pads,
 	.npins = ARRAY_SIZE(light_mpw_pinctrl_pads),
-	.type = LIGHT_MPW,
 	.cfg_off = 0x4c,
 	.mux_off = 0x404,
 	.covert_pin_off = light_pinctrl_mpw_convert_pin_off,
@@ -946,7 +873,6 @@ static struct light_pinctrl_soc_info light_mpw_pinctrl_info = {
 static struct light_pinctrl_soc_info light_fm_right_pinctrl_info = {
 	.pins = light_fm_right_pinctrl_pads,
 	.npins = ARRAY_SIZE(light_fm_right_pinctrl_pads),
-	.type = LIGHT_FM_RIGHT,
 	.cfg_off = 0x0,
 	.mux_off = 0x400,
 };
@@ -954,7 +880,6 @@ static struct light_pinctrl_soc_info light_fm_right_pinctrl_info = {
 static struct light_pinctrl_soc_info light_fm_left_pinctrl_info = {
 	.pins = light_fm_left_pinctrl_pads,
 	.npins = ARRAY_SIZE(light_fm_left_pinctrl_pads),
-	.type = LIGHT_FM_LEFT,
 	.cfg_off = 0x0,
 	.mux_off = 0x400,
 };
@@ -962,19 +887,9 @@ static struct light_pinctrl_soc_info light_fm_left_pinctrl_info = {
 static struct light_pinctrl_soc_info light_fm_aon_pinctrl_info = {
 	.pins = light_fm_aon_pinctrl_pads,
 	.npins = ARRAY_SIZE(light_fm_aon_pinctrl_pads),
-	.type = LIGHT_FM_AON,
 	.cfg_off = 0x0,
 	.mux_off = 0x400,
 	.covert_pin_off = light_pinctrl_fm_aon_covert_pin_off,
-};
-
-static struct light_pinctrl_soc_info light_fm_audio_pinctrl_info = {
-	.pins = light_fm_audio_pinctrl_pads,
-	.npins = ARRAY_SIZE(light_fm_audio_pinctrl_pads),
-	.label = "LIGHT-AUDIO-IO",
-	.type = LIGHT_FM_AUDIO,
-	.cfg_off = 0x0C,
-	.mux_off = 0x4,
 };
 
 static const struct of_device_id light_pinctrl_of_match[] = {
@@ -982,7 +897,6 @@ static const struct of_device_id light_pinctrl_of_match[] = {
 	{ .compatible = "thead,light-fm-right-pinctrl",	.data = &light_fm_right_pinctrl_info},
 	{ .compatible = "thead,light-fm-left-pinctrl",	.data = &light_fm_left_pinctrl_info},
 	{ .compatible = "thead,light-fm-aon-pinctrl",	.data = &light_fm_aon_pinctrl_info},
-	{ .compatible = "thead,light-fm-audio-pinctrl",	.data = &light_fm_audio_pinctrl_info},
 	{ /* sentinel */ }
 };
 MODULE_DEVICE_TABLE(of, light_pinctrl_of_match);
@@ -999,6 +913,6 @@ static struct platform_driver light_pinctrl_driver = {
 
 module_platform_driver(light_pinctrl_driver);
 
-MODULE_AUTHOR("fugang.duan <duanfugang.dfg@linux.alibaba.com>");
+MODULE_AUTHOR("fugang.duan <duanfugang.dfg@alibaba-inc.com>");
 MODULE_DESCRIPTION("Thead light pinctrl driver");
 MODULE_LICENSE("GPL v2");

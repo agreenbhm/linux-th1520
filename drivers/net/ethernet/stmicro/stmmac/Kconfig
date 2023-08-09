@@ -180,6 +180,16 @@ config DWMAC_STARFIVE
 	  the stmmac device driver. This driver is used for StarFive JH7110
 	  ethernet controller.
 
+config DWMAC_LIGHT
+        tristate "Thead Light DWMAC support"
+        depends on OF && (ARCH_THEAD || COMPILE_TEST)
+        help
+          Support for ethernet controller on Thead SOCs.
+
+          This selects Thead SoC glue layer support for the stmmac
+          device driver. This driver is used for the Thead ice and light series
+          SOCs GMAC ethernet controller.
+
 config DWMAC_STI
 	tristate "STi GMAC support"
 	default ARCH_STI
@@ -299,3 +309,4 @@ config STMMAC_PCI
 
 	  If unsure, say N.
 endif
+

@@ -6,16 +6,27 @@
 
 #include <dt-bindings/interrupt-controller/irq.h>
 #include <dt-bindings/clock/light-fm-ap-clock.h>
+#include <dt-bindings/clock/light-vpsys.h>
+#include <dt-bindings/clock/light-vosys.h>
+#include <dt-bindings/clock/light-visys.h>
+#include <dt-bindings/clock/light-dspsys.h>
 #include <dt-bindings/thermal/thermal.h>
 #include <dt-bindings/pinctrl/light-fm-left-pinctrl.h>
 #include <dt-bindings/pinctrl/light-fm-right-pinctrl.h>
 #include <dt-bindings/pinctrl/light-fm-aon-pinctrl.h>
 #include <dt-bindings/pinctrl/light-fm-audio-pinctrl.h>
+#include <dt-bindings/reset/light-reset.h>
+#include <dt-bindings/firmware/thead/rsrc.h>
 
 / {
 	compatible = "thead,th1520";
 	#address-cells = <2>;
 	#size-cells = <2>;
+
+	aliases {
+                ethernet0 = &gmac0;
+                ethernet1 = &gmac1;
+	};
 
 	thermal-zones {
 		cpu-thermal-zone {
@@ -164,7 +175,7 @@
 	    status = "okay";
 	};
 
-	osc: oscillator {
+	osc_24m: oscillator {
 		compatible = "fixed-clock";
 		clock-output-names = "osc_24m";
 		#clock-cells = <0>;
@@ -178,7 +189,6 @@
 
 	rc_24m: clock-rc-24m@13 {
 		compatible = "fixed-clock";
-		/*reg = <13>;*/
 		#clock-cells = <0>;
 		clock-frequency = <24000000>;
 		clock-output-names = "rc_24m";
@@ -205,11 +215,15 @@
 
 	dummy_clock_aonsys_clk: aonsys-clk-clock@19 {
 		compatible = "fixed-clock";
-		/*reg = <19>;*/
 		clock-frequency = <73728000>;
 		clock-output-names = "dummy_clock_aonsys_clk";
 		#clock-cells = <0>;
 	};
+
+        teesys_syscon: teesys-reg@ffff200000 {
+                compatible = "syscon";
+                reg = <0xff 0xff200000 0x0 0x10000>;
+        };
 
 	soc {
 		compatible = "simple-bus";
@@ -413,6 +427,52 @@
 			status = "disabled";
 		};
 
+               stmmac_axi_setup: stmmac-axi-config {
+                        snps,wr_osr_lmt = <3>;
+                        snps,rd_osr_lmt = <3>;
+                        snps,blen = <16 8 4 0 0 0 0>;
+                };
+
+                gmac0: ethernet@ffe7070000 {
+                        compatible = "thead,dwmac";
+                        reg = <0xff 0xe7070000 0x0 0x2000
+                               0xff 0xec00301c 0x0 0x4
+                               0xff 0xec003020 0x0 0x4
+                               0xff 0xec003000 0x0 0x1c>;
+                        reg-names = "gmac", "phy_if_reg", "txclk_dir_reg", "clk_mgr_reg";
+                        interrupt-parent = <&plic>;
+                        interrupts = <66 IRQ_TYPE_LEVEL_HIGH>;
+                        interrupt-names = "macirq";
+                        clocks = <&clk CLKGEN_GMAC0_CCLK>;
+                        clock-names = "gmac_pll_clk";
+                        snps,pbl = <32>;
+                        snps,fixed-burst;
+                        snps,axi-config = <&stmmac_axi_setup>;
+                        nvmem-cells = <&gmac0_mac_address>;
+                        nvmem-cell-names = "mac-address";
+                };
+
+                gmac1: ethernet@ffe7060000 {
+                        compatible = "thead,dwmac";
+                        reg = <0xff 0xe7060000 0x0 0x2000
+                               0xff 0xec00401c 0x0 0x4
+                               0xff 0xec004020 0x0 0x4
+                               0xff 0xec004000 0x0 0x1c>;
+                        reg-names = "gmac", "phy_if_reg", "txclk_dir_reg", "clk_mgr_reg";
+                        interrupt-parent = <&plic>;
+                        interrupts = <67 IRQ_TYPE_LEVEL_HIGH>;
+                        interrupt-names = "macirq";
+                        clocks = <&clk CLKGEN_GMAC1_CCLK>;
+                        clock-names = "gmac_pll_clk";
+                        snps,pbl = <32>;
+                        snps,fixed-burst;
+                        snps,axi-config = <&stmmac_axi_setup>;
+                        nvmem-cells = <&gmac1_mac_address>;
+                        nvmem-cell-names = "mac-address";
+			#address-cells = <0>;
+                };
+
+
 		timer0: timer@ffefc32000 {
 			compatible = "snps,dw-apb-timer";
 			reg = <0xff 0xefc32000 0x0 0x14>;
@@ -540,18 +600,31 @@
 				interrupts = <55 IRQ_TYPE_LEVEL_HIGH>;
 			};
 		};
+
 	};
+
+        nvmem_controller: efuse@ffff210000 {
+                compatible = "thead,light-fm-efuse", "syscon";
+                reg = <0xff 0xff210000 0x0 0x10000>;
+                thead,teesys = <&teesys_syscon>;
+                #address-cells = <1>;
+                #size-cells = <1>;
+
+                gmac0_mac_address: mac-address@176 {
+                        reg = <0xb0 6>;
+                };
+
+                gmac1_mac_address: mac-address@184 {
+                        reg = <0xb8 6>;
+                };
+        };
 
 	clk: clock-controller@ffef010000 {
 		compatible = "thead,light-fm-ree-clk";
 		reg = <0xff 0xef010000 0x0 0x1000>;
 		#clock-cells = <1>;
-		clocks = <&osc_32k>, <&osc>, <&rc_24m>;
-		clock-names = "osc_32k", "osc", "rc_24m";
-	
-		/*clocks = <&osc_32k>, <&osc>, <&rc_24m>;
-		clock-names = "osc_32k", "osc_24m", "rc_24m";*/
-	
+		clocks = <&osc_32k>, <&osc_24m>, <&rc_24m>;
+		clock-names = "osc_32k", "osc_24m", "rc_24m";
 		status = "okay";
 	};
 
